@@ -2,9 +2,10 @@
   "name": "js_backend",
   "version": "1.0.0",
   "description": "this is the first learning repo for backend js",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev" : "nodemon src/index.js"
+    "dev": "nodemon src/index.js"
   },
   "keywords": [
     "js_backend",
@@ -14,5 +15,10 @@
   "license": "ISC",
   "devDependencies": {
     "nodemon": "^3.1.4"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.5.3"
   }
 }
