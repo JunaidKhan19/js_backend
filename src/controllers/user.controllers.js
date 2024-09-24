@@ -188,7 +188,7 @@ const logoutUser = asyncHandler (async (req, res) => {
     //to access the cookie we need to get id of the logged in user and in order to get 
     //this id we need to use a middleware i.e auth.middleware.js
     await User.findByIdAndUpdate(req.user._id, 
-        { $set : {refreshToken : undefined} },
+        { $unset : {refreshToken : 1} },
         {new: true}
     )
 
@@ -371,10 +371,10 @@ const getUserChannelProfile = asyncHandler (async (req, res) => {
         {
             $addFields : {
                 subscribersCount : {
-                    $size : "subscribers"
+                    $size : "$subscribers"
                 },
                 channelsSubscribedToCount : {
-                    $size : "subscriberdTo"
+                    $size : "$subscribedTo"
                 },
                 isSubscribed : {
                     $cond : {
@@ -440,7 +440,9 @@ const getWatchHistory = asyncHandler (async (req, res) => {
                     },
                     {
                         $addFields : {
-                            $first : "$owner"
+                            owner:{
+                                $first: "$owner"
+                            }
                         }
                     }
                 ]

@@ -1,6 +1,9 @@
+import dotenv from 'dotenv';
 import mongoose , {Schema} from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+
+dotenv.config({ path: '../js_backend/.env' });
 
 const userSchema = new Schema({
     userName : {
@@ -58,27 +61,31 @@ userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password) //to check if the password is correct or not
 }
 
-userSchema.methods.generateAccessToken = async function () {
-    return jwt.sign({
-        _id : this._id,
-        email : this.email,
-        userName : this.userName,
-        fullName : this.fullName
-    }),
-    process.env.ACCESS_TOKEN_SECRET,
-    {
-        expiresIn : process.env.ACCESS_TOKEN_EXPIRY
-    }
+userSchema.methods.generateAccessToken = function () {
+    return jwt.sign(
+        {
+            _id : this._id,
+            email : this.email,
+            userName : this.userName,
+            fullName : this.fullName
+        },
+        process.env.ACCESS_TOKEN_SECRET,
+        {
+            expiresIn : process.env.ACCESS_TOKEN_EXPIRY
+        }
+    )
 }
 
-userSchema.methods.generateRefreshToken = async function () {
-    return jwt.sign({
-        _id : this._id
-    }),
-    process.env.REFRESH_TOKEN_SECRET,
-    {
-        expiresIn : process.env.REFRESH_TOKEN_EXPIRY
-    }
+userSchema.methods.generateRefreshToken = function () {
+    return jwt.sign(
+        {
+            _id : this._id
+        },
+        process.env.REFRESH_TOKEN_SECRET,
+        {
+            expiresIn : process.env.REFRESH_TOKEN_EXPIRY
+        }
+    )
 }
 
 export const User = mongoose.model("User", userSchema)
