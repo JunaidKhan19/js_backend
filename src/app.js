@@ -30,13 +30,10 @@ app.use(cookieParser())
 
 //router import
 import userRouter from "./routes/user.routes.js";
+import tweetRouter from "./routes/tweet.routes.js"
 
 //routes declaration
 app.use("/api/v1/users", userRouter)
-/*
-when user types /user the repuest is sent to userRouter controller and there is the upcoming 
-user routes to perform actions accordingly
-(eg: after /user the controller goes to userRouter then there is written /register so the url becomes /user/register 
-by this way we create routes to perform actions on the app)
-*/
+app.use("/api/v1/tweet", tweetRouter)
+
 export {app};
