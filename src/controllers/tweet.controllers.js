@@ -100,6 +100,10 @@ const updateTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid Tweet ID");
     }
 
+    if (tweet.owner.toString() !== req.user._id.toString()) {
+        throw new ApiError(403, "You are not authorized to modify/delete this tweet");
+    }
+
     const tweet = await Tweet.findByIdAndUpdate(
         tweetId,
         { content },
@@ -127,14 +131,20 @@ const deleteTweet = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Tweet not found");
     }
 
+    if (tweet.owner.toString() !== req.user._id.toString()) {
+        throw new ApiError(403, "You are not authorized to modify/delete this tweet");
+    }
+
     if (tweet.retweetsTo) {
+        await Tweet.findByIdAndUpdate(tweet.retweetsTo, { $pull : {retweets : tweetId}})
+        /*
         //If it's a retweet, find the original tweet (main tweet)
         const originalTweet = await Tweet.findById(tweet.retweetsTo);
 
         if (originalTweet) {
             originalTweet.retweets.pull(tweetId); //Remove the retweet's ID from the original tweet's retweets array
             await originalTweet.save(); //Save the original tweet after updating the retweets array
-        }
+        }*/
         await tweet.deleteOne(); //Delete the retweet
 
     } else {
@@ -185,7 +195,7 @@ const likeTweet = asyncHandler(async (req, res) => {
                         likedBy: likedTweet.likes,//optional since likedTweet.populate privides this
                         totalLikes: likedTweet.likes.length
                     },
-                    isliked ? "Disliked tweet" : "Liked tweet"
+                    isliked ? "unliked tweet" : "Liked tweet"
                 )
               
             )  
@@ -215,14 +225,14 @@ const retweet = asyncHandler(async (req, res) => {
         owner : req.user._id, // The owner of the reply (the user making the reply)
         likes : [], //the likes to the retwwets initialized as empty
         retweets : [],
-        retweetsTo : {tweetId : 1} // Linking the reply to the original tweet based on its Id
+        retweetsTo : tweetId // Linking the reply to the original tweet based on its Id
     })
 
     // Ensure the retweets array exists and is an array
     tweet.retweets = tweet.retweets || []; // Initialize if undefined
 
     // Push the retweet ID to the retweets array and Save the updated tweet document (main tweet)
-    tweet.retweets.push(Retweet._id);
+    tweet.retweets.push(Retweet._id);   
     await tweet.save();
 
     // Populate the retweets field of main tweet 
