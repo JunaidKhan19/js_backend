@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
     addComment,
+    getVideoComments,
     getComment,
     updateComment,
     deleteComment,
@@ -8,26 +9,29 @@ import {
     dislikeComment,
     replyComment,
     getreply
-} from "../controllers/comment.controllers.js"
-import { verifyJWT } from '../middlewares/auth.middleware.js';
+} from "../controllers/comment.controllers.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router()
 router.use(verifyJWT)
 
-router.route("/:videoId/addcomment").post(addComment)
+router.route("/uploadcomment/:videoId").post(addComment);
 
-router.route("/getcomment/:commentId").get(getComment);
+router.route("/getvideocomment/:videoId").get(getVideoComments)
 
 router.route("/:commentId")
-      .patch(updateComment)
-      .delete(deleteComment)
 
-router.route("/like/:commentId").patch(likeComment)
+router.route("/:commentId")
+    .get(getComment)
+    .patch(updateComment)  // For updating the tweet
+    .delete(deleteComment);  // For deleting the tweet
 
-router.route("/dislike/:commentId").patch(dislikeComment)
+router.route("/like/:commentId").patch(likeComment);
 
-router.route("/:commentId/replycomment").post(replyComment)
+router.route("/dislike/:commentId").patch(dislikeComment);
 
-router.route("/:commentId/getreply").get(getreply)
+router.route("/reply/:commentId").post(replyComment);
+
+router.route("/getreply/:commentId").get(getreply);
 
 export default router;

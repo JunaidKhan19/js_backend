@@ -8,6 +8,7 @@ import {app} from "../src/app.js"
 //console.log('Loading dotenv...');
 dotenv.config({ path: '../js_backend/.env' });
 //console.log('dotenv loaded');
+console.log(process.env.MONGODB_URI)
 
 // mongodb_uri and PORT are the environment variables and must be written in .env file
 //but i have written it here bcauz the .env was not loading in the index.js

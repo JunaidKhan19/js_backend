@@ -1,23 +1,22 @@
 import { Router } from "express";
 import {     
-    uploadVideo,
+    publishAVideo,
     getVideo,
     updateVideo,
     deleteVideo,
     getAllVideos,
     serchVideos,
-    incrimentViews 
+    incrimentViews,
+    likeVideo,
+    dislikeVideo
 } from "../controllers/video.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-// Set up Multer for handling file uploads (e.g., videos and thumbnails)
-//const upload = multer({ dest: './public/uploads/' }); // destination folder for uploaded files
-
 router.route("/upload")
-      .post(verifyJWT, upload.fields([{ name: 'videofile' }, { name: 'thumbnail' }]), uploadVideo);
+      .post(verifyJWT, upload.fields([{ name: 'videofile' }, { name: 'thumbnail' }]), publishAVideo);
 
 router.route("/:videoId").get(getVideo); // Fetch a single video by ID
 
@@ -28,8 +27,12 @@ router.route("/:videoId").delete(verifyJWT, deleteVideo);
 
 router.route("/allvideos").get(getAllVideos); 
 
-router.route("/search").get(serchVideos); // Search videos by query string
+router.route("/search").get(serchVideos); 
 
-router.route("/:videoId/views").patch(incrimentViews); // Increment video views count
+router.route("/:videoId/views").patch(incrimentViews); 
+
+router.route("/like/:videoId").patch(verifyJWT, likeVideo);
+
+router.route("/dislike/:videoId").patch(verifyJWT, dislikeVideo);
 
 export default router;

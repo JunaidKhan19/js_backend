@@ -34,14 +34,6 @@ const videoSchema = new Schema({
         type : Schema.Types.ObjectId,
         ref : "User"
     },
-    tags: {
-        type: [String],
-        default: []
-    },
-    quality: [{
-        resolution: String,
-        url: String
-    }],
     likes: [{
         type: Schema.Types.ObjectId,
         ref: "User"
@@ -50,10 +42,6 @@ const videoSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: "User"
     }],
-    comments: [{
-        type: Schema.Types.ObjectId,
-        ref: "Comment"
-    }]
 }, {timestamps : true})
 
 videoSchema.plugin(mongooseAggregatePaginate)

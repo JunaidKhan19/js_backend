@@ -15,31 +15,38 @@ const commentSchema = new Schema({
         ref : "User",
         required : true
     },
-    replies : [{
-        id  : Schema.Types.ObjectId,
-        ref : 'Comment',
-        default : null
+    replies: [{
+        type: Schema.Types.ObjectId,
+        ref: "Comment",
+        default: null
     }],
-    repliesTo : [{
-        id  : Schema.Types.ObjectId,
-        ref : 'Comment',
-        default : null
+    repliesTo: {
+        type: Schema.Types.ObjectId,  // Corrected here
+        ref: "Comment",
+        default: null
+    },
+    likes: [{
+        type: Schema.Types.ObjectId,  // Corrected here
+        ref: 'User'
     }],
-    likes : [{
-        id  : Schema.Types.ObjectId,
-        ref : 'User'
+    dislikes: [{
+        type: Schema.Types.ObjectId,  // Corrected here
+        ref: 'User'
     }],
-    dislikes : [{
-        id  : Schema.Types.ObjectId,
-        ref : 'User'
-    }],
-    mentions : [{
-        id : Schema.Types.ObjectId,
-        ref : 'User'
+    mentions: [{
+        userId: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+        },
+        username: {
+            type: String,
+            required: true
+        }
     }],
 },{timestamps : true})
 
-commentSchema.plugin(mongooseAggregatePaginate)
+commentSchema.plugin(mongooseAggregatePaginate);
 
 /*
 // Virtual for counting replies
@@ -59,4 +66,4 @@ commentSchema.pre('save', function(next) {
 });
 */
 
-export const Comment = mongoose.model("Comment", commentSchema)
+export const Comment = mongoose.model("Comment", commentSchema);

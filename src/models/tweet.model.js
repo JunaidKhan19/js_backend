@@ -17,10 +17,10 @@ const tweetSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: "Tweet"
     }],
-    retweetsTo: [{
+    retweetsTo: {
         type: Schema.Types.ObjectId,
         ref: "Tweet"
-    }]
+    }
 },{timestamps : true})
 
 export const Tweet = mongoose.model("Tweet", tweetSchema)

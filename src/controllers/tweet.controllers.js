@@ -241,14 +241,7 @@ const retweet = asyncHandler(async (req, res) => {
         select: "userName fullName email content"
     });
 
-    return res.status(200)
-              .json(
-                new ApiResponse(
-                    200,
-                    { Retweet },
-                    "Retweeted successfully"
-                )       
-            );
+    return res.status(200).json(new ApiResponse(200, { Retweet }, "Retweeted successfully"));
 });
 
 const getRetweets = asyncHandler(async (req, res) => {

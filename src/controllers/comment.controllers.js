@@ -1,22 +1,24 @@
 import mongoose, { isValidObjectId } from "mongoose";
-import { Comment } from '../models/comment.model.js';
-import { Video } from "../models/video.model.js";
-import { User } from '../models/user.model.js';
+import { Comment } from "../models/comment.model.js";
+import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asynchandler.js";
 
 const addComment = asyncHandler(async (req, res) => {
-    const { content } = req.body
-    const { videoId } = req.params
-    const userId = req.user._id
+    const { videoId } = req.params;
+    const { content } = req.body;
+    const userId = req.user._id;
 
     if (!content){
         throw new ApiError(400, "content is required")
     }
-    
-    if (!(videoId && userId)){
-        throw new ApiError(400, "video and user not found")
+
+    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
+        throw new ApiError(400, "Invalid or missing video ID");
+    }
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        throw new ApiError(400, "Invalid or missing user ID");
     }
 
     // Regular expression to find mentions in the format @username
@@ -26,27 +28,42 @@ const addComment = asyncHandler(async (req, res) => {
     const mentionedUsernames = [...content.matchAll(mentionRegex)].map(match => match[1]);
 
     // Find users based on the mentioned usernames
-    const mentionedUsers = await User.find({ username: { $in: mentionedUsernames } })
-                                     .select("_id username");
+    const mentionedUsers = await User.find({ userName: { $in: mentionedUsernames } }).select("_id userName");
 
-    const mentions = mentionedUsers.map(user => ({ userId: user._id, username: user.username }));
+    const mentions = mentionedUsers.map(user => ({ userId: user._id, username: user.userName }));
 
     const comment = await Comment.create({
-        content,
+        content : content,
         video : videoId,
         owner : req.user._id,
-        mentions,
+        mentions : mentions,
     })
 
     return res.status(200).json(new ApiResponse(200, comment, "comment added successfully"))
 })
 
 const getVideoComments = asyncHandler(async (req, res) => {
-    //TODO: get all comments for a video
-    const {videoId} = req.params
-    const {page = 1, limit = 10} = req.query
+    const { videoId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
 
-})
+    const pageInt = parseInt(page);
+    const limitInt = parseInt(limit);
+
+    const comments = await Comment.find({ video: videoId })
+        .skip((pageInt - 1) * limitInt)
+        .limit(limitInt)
+        .sort({ createdAt: -1 }); // Sort by most recent
+
+    // Get the total count of comments for pagination metadata
+    const totalComments = await Comment.countDocuments({ video: videoId });
+
+    res.status(200).json(new ApiResponse(200, {
+        data: comments,
+        page: pageInt,
+        totalPages: Math.ceil(totalComments / limitInt),
+        totalComments : totalComments
+    }));
+});
 
 const getComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params
@@ -56,18 +73,18 @@ const getComment = asyncHandler(async (req, res) => {
     }
 
     const comment = await Comment.findById(commentId).populate("owner", "username fullName avatar")
+                                                     .populate("video", "title description thumbnail")
     
     if (!comment){
         throw new ApiError(400, "not valid comment" )
     }
     
-    return res.status(200)
-              .json(new ApiResponse(200, comment, "comment fetched successfully"))
+    return res.status(200).json(new ApiResponse(200, comment, "comment fetched successfully"))
 })
 
 const updateComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params
-    const { content, mentions} = req.body
+    const { content } = req.body
 
     if (!isValidObjectId(commentId)){
         throw new ApiError(400, "not valid comment id")
@@ -75,6 +92,12 @@ const updateComment = asyncHandler(async (req, res) => {
 
     const updateData = {};
     if (content) updateData.content = content;
+    
+    const mentionRegex = /@(\w+)/g;
+    const mentionedUsernames = [...content.matchAll(mentionRegex)].map(match => match[1]);
+    const mentionedUsers = await User.find({ userName: { $in: mentionedUsernames } }).select("_id userName");
+    const mentions = mentionedUsers.map(user => ({ userId: user._id, username: user.userName }));
+
     if (mentions) updateData.mentions = mentions;
 
     const comment = await Comment.findByIdAndUpdate(
@@ -87,8 +110,7 @@ const updateComment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "not valid comment")
     }
 
-    return res.status(200)
-              .json(new ApiResponse(200, comment, "comment updated successfully"))
+    return res.status(200).json(new ApiResponse(200, comment, "comment updated successfully"))
 })
 
 const deleteComment = asyncHandler(async (req, res) => {
@@ -106,18 +128,13 @@ const deleteComment = asyncHandler(async (req, res) => {
 
     if (comment.repliesTo){
         await Comment.findByIdAndUpdate(comment.repliesTo, { $pull: { replies: commentId } });
-        /*const originalComment = await Comment.findById(comment.repliesTo)
+        /* working explained:
+        const originalComment = await Comment.findById(comment.repliesTo)
         if (originalComment){
             originalComment.replies.pull(commentId)
             await originalComment.save()
-        }*/
-    }else if (comment.video){
-        await Video.findByIdAndUpdate(comment.video, { $pull: { comments: commentId } });
-        /*const video = await Video.findById(comment.video)
-        if (video){
-            video.comments.pull(commentId)
-            await video.save()
-        }*/
+        }
+        */
     }
     await comment.deleteOne()
 
@@ -139,9 +156,15 @@ const likeComment = asyncHandler(async (req, res) => {
 
     const isLiked = comment.likes.some( like => like._id.toString() === req.user._id.toString() )
 
+    const isdisliked = comment.dislikes.some( dislike => dislike._id.toString() === req.user._id.toString() )
+
     if (isLiked){
-        comment.likes.pull(req.user._id)
-    }else{
+        return res.status(200).json(new ApiResponse(200, {}, "You have already liked the comment"));
+    }
+    
+    if (isdisliked) {
+        comment.dislikes.pull(req.user._id)
+    } else {
         comment.likes.push(req.user._id)
     }
 
@@ -158,10 +181,10 @@ const likeComment = asyncHandler(async (req, res) => {
                     200,
                     {
                         comment,
-                        likedby : comment.likes,
-                        totalLikes: comment.likes.length
+                        liked_by : comment.likes,
+                        total_likes: comment.likes.length
                     },
-                    isLiked? "unliked comment" : "liked comment"
+                    "liked comment"
                 )
             )
 })
@@ -179,11 +202,17 @@ const dislikeComment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "not a valid comment");
     }
 
-    const isDisliked = comment.dislikes.some( dislikes => dislikes._id.toString() === req.user._id.toString() )
+    const isLiked = comment.likes.some( like => like._id.toString() === req.user._id.toString() )
 
-    if (isDisliked){
-        comment.dislikes.pull(req.user._id)
-    }else{
+    const isdisliked = comment.dislikes.some( dislike => dislike._id.toString() === req.user._id.toString() )
+
+    if (isdisliked){
+        return res.status(200).json(new ApiResponse(200, {}, "you have already disliked the comment"))
+    }
+
+    if (isLiked){
+        comment.likes.pull(req.user._id)
+    } else {
         comment.dislikes.push(req.user._id)
     }
 
@@ -203,7 +232,7 @@ const dislikeComment = asyncHandler(async (req, res) => {
                         dislikedby : comment.dislikes,
                         totalDislikes: comment.dislikes.length
                     },
-                    isDisliked? "unliked comment" : "liked comment"
+                    "unliked comment" 
                 )
             )
 })
@@ -222,12 +251,11 @@ const replyComment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "not a valid comment")
     }
 
-    //creating reply 
     const Reply = await Comment.create({
         content,        
         owner : req.user._id,
         repliesTo : commentId //main comment id referenced in the repliesTo
-    }).then(reply => reply.populate('owner', 'username fullName avatar'));
+    })
 
     //Ensure if repliesTo array exist and is an array 
     comment.replies = comment.replies || [] //initialize if undefined
@@ -239,11 +267,10 @@ const replyComment = asyncHandler(async (req, res) => {
     //populate the main comment replies field
     await comment.populate({
         path : "replies",
-        select : "content owner"
+        select : "content userName fullName email"
     })
 
-    return res.status(200)
-              .json(new ApiResponse(200, { Reply }, "reply added successfully"))
+    return res.status(200).json(new ApiResponse(200, { Reply }, "reply added successfully"))
 })
 
 const getreply = asyncHandler (async (req, res) => {
@@ -301,7 +328,8 @@ const getreply = asyncHandler (async (req, res) => {
                     content : 1,
                     owner : 1,
                     createdAT : 1,
-                    updatedAt : 1 
+                    updatedAt : 1 ,
+                    repliesTo : 1
                 },
                 repliesTo : 1
             }
@@ -312,13 +340,13 @@ const getreply = asyncHandler (async (req, res) => {
         throw new ApiError(400, "no reply found")
     }
 
-    return res.status(200)
-              .json(new ApiResponse(200 , replylist, "replies fetched successfully"))
+    return res.status(200).json(new ApiResponse(200 , replylist, "replies fetched successfully"))
 })
 
 export {
     addComment,
     getComment,
+    getVideoComments,
     updateComment,
     deleteComment,
     likeComment,
