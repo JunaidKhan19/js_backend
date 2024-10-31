@@ -11,9 +11,9 @@ import {
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
+router.use(verifyJWT);
 
-router.route("/create").post(createPlaylist);
+router.route("/createplaylist").post(createPlaylist);
 
 router.route("/u/:userId").get(getUserPlaylists);
 
