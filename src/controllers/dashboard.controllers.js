@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+import mongoose, {isValidObjectId} from "mongoose"
 import { Video } from "../models/video.model.js"
 import { Subscription } from "../models/subscription.model.js"
 import { asyncHandler } from "../utils/asynchandler.js"
@@ -31,23 +31,22 @@ const getChannelStats = asyncHandler(async (req, res) => {
     */
     const videoStats = await Video.aggregate([
         {
-            $match : {owner: mongoose.Types.ObjectId(channelId)}
+            $match : {owner: new mongoose.Types.ObjectId(channelId)}
         },
         {
             $group : {
                 _id : null,
                 totalVideos : {$sum : 1},
-                totalViews : {$sum : "views"},
-                totalLikes : {$sum : {$size : "likes"}},
-                totalDislikes : {$sum : {$size : "dislikes"}},
-                totalComments : {$sum : {$size : "comments"}},
+                totalViews : {$sum : "$views"},
+                totalLikes : {$sum : {$size : "$likes"}},
+                totalDislikes : {$sum : {$size : "$dislikes"}},
             }
         }
     ])
 
     const totalSubscribers = await Subscription.countDocuments({channel : channelId})
 
-    const stats = videoStats[0] || {totalVideos: 0, totalViews: 0, totalLikes: 0, totalDislikes: 0, totalComments: 0}
+    const stats = videoStats[0] || {totalVideos: 0, totalViews: 0, totalLikes: 0, totalDislikes: 0}
 
     return res.status(200)
               .json(new ApiResponse(
@@ -58,7 +57,6 @@ const getChannelStats = asyncHandler(async (req, res) => {
                     totalViews : stats.totalViews,
                     totalLikes : stats.totalLikes,
                     totalDislikes : stats.totalDislikes,
-                    totalComments : stats.totalComments
                 }, 
                 "Channel statistics fetched successfully")        
             );
@@ -74,7 +72,7 @@ const getChannelVideos = asyncHandler(async (req, res) => {
 
     const videos = await Video.find({ owner: channelId })
                               .sort({ createdAt: -1 }) // Most recent videos first
-                              .select("title views likes createdAt thumbnail")
+                              .select("title thumbnail views likes dislikes createdAt")
                               .skip((page - 1) * limit) //show the videos on current page
                               .limit(Number(limit))
     
