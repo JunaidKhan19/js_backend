@@ -24,7 +24,7 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     });
 
     if (deletedSubscription) {
-        return res.status(204).json(new ApiResponse(204, {}, "Unsubscribed successfully"));
+        return res.status(200).json(new ApiResponse(200, {}, "Unsubscribed successfully"));
     } else {
         // If subscription doesn't exist, create a new subscription
         const newSubscription = await Subscription.create({
