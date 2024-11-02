@@ -1,11 +1,10 @@
 import { Router } from "express";
 import {     
     publishAVideo,
-    getVideo,
+    getVideobyId,
     updateVideo,
     deleteVideo,
     getAllVideos,
-    serchVideos,
     incrimentViews,
     likeVideo,
     dislikeVideo
@@ -15,19 +14,18 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
+// Route for fetching all videos with pagination and search
+router.route("/all_videos").get(getAllVideos); //place this route before the other routes that uses videoid 
+
 router.route("/upload")
       .post(verifyJWT, upload.fields([{ name: 'videofile' }, { name: 'thumbnail' }]), publishAVideo);
 
-router.route("/:videoId").get(getVideo); // Fetch a single video by ID
+router.route("/:videoId").get(getVideobyId); // Fetch a single video by ID
 
 router.route("/:videoId")
       .patch(verifyJWT, upload.single('thumbnail'), updateVideo); 
 
 router.route("/:videoId").delete(verifyJWT, deleteVideo); 
-
-router.route("/allvideos").get(getAllVideos); 
-
-router.route("/search").get(serchVideos); 
 
 router.route("/:videoId/views").patch(incrimentViews); 
 
