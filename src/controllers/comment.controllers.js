@@ -57,12 +57,26 @@ const getVideoComments = asyncHandler(async (req, res) => {
     // Get the total count of comments for pagination metadata
     const totalComments = await Comment.countDocuments({ video: videoId });
 
+    // Convert the array of comments to an object with commentId as the key
+    const commentsObject = comments.reduce((acc, comment) => {
+        acc[comment._id] = comment; // Use comment._id as the key
+        return acc;
+    }, {});
+
+    res.status(200).json(new ApiResponse(200, {
+        commentsObject,  // Return comments as an object
+        page: pageInt,
+        totalPages: Math.ceil(totalComments / limitInt),
+        totalComments: totalComments
+    }));
+    /*
     res.status(200).json(new ApiResponse(200, {
         data: comments,
         page: pageInt,
         totalPages: Math.ceil(totalComments / limitInt),
         totalComments : totalComments
     }));
+    */
 });
 
 const getComment = asyncHandler(async (req, res) => {
