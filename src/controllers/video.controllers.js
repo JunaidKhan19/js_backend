@@ -156,51 +156,6 @@ const getAllVideos = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, videos, "Videos fetched successfully"));
 });
 
-/**using query and firlter
- const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query = "", sortBy = "createdAt", sortType = "desc",  userId } = req.query;
-
-    const filters = {};
-    
-    // Build filters based on query or userId
-    if (query) {
-        filters.$or = [
-            { title: { $regex: query, $options: "i" } },
-            { description: { $regex: query, $options: "i" } }
-        ];
-    }
-    if (userId) {
-        filters.owner = userId;  // Filter by specific user's videos
-    }
-
-    // Pagination logic
-    const skip = (page - 1) * limit;
-
-    // Sort logic
-    const sortOptions = { [sortBy]: sortType === "asc" ? 1 : -1 };
-
-    // Fetch videos from the database
-    const videos = await Video.find(filters)
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(parseInt(limit));
-
-    // Get total video count for pagination info
-    const totalVideos = await Video.countDocuments(filters);
-
-    // Prepare response data
-    const responseData = {
-        videos,
-        totalPages: Math.ceil(totalVideos / limit),
-        currentPage: parseInt(page),
-        totalVideos
-    };
-
-    // Return success response
-    return res.status(200).json(new ApiResponse(200, responseData, "Videos fetched successfully"));
-});
-*/
-
 const incrimentViews = asyncHandler (async (req, res) => {
     const { videoId } = req.params
 

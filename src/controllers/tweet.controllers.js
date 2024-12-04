@@ -23,6 +23,71 @@ const createTweet = asyncHandler(async (req, res) => {
               .json(new ApiResponse(200, tweet, "Tweet created successfully"));
 });
 
+const getAllTweets = async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+        // Aggregation pipeline to fetch tweets with pagination
+    const tweets = await Tweet.aggregate([
+        {
+            $lookup: {
+                from: 'users', // Join the 'users' collection
+                localField: 'owner', // Match tweets.owner
+                foreignField: '_id', // With users._id
+                as: 'owner', // Store matched user data in 'owner'
+            },
+        },
+        {
+            $addFields: {
+                owner: { $arrayElemAt: ['$owner', 0] }, // Unwrap the owner array
+            },
+        },
+        {
+            $sort: { createdAt: -1 }, // Sort by creation date
+        },
+        {
+            $project: {
+                content: 1, // Include tweet content
+                likes: 1, // Include likes count
+                retweets: 1, // Include retweets count
+                replies: 1, // Include replies count
+                createdAt: 1, // Include creation date
+                owner: {
+                    userName: 1, // Include owner's username
+                    avatar: 1, // Include owner's avatar
+                },
+            },
+        },
+        { $skip: skip }, // Skip documents based on page
+        { $limit: limitNumber }, // Limit documents to the page size
+    ]);
+    
+    /* using populate
+    const tweets = await Tweet.find({})
+        .populate({ path: 'owner', select: 'userName avatar' }) // Populate owner details
+        .sort({ createdAt: -1 }) // Sort tweets by creation date in descending order
+        .skip(skip) // Skip tweets based on the current page
+        .limit(limitNumber); // Limit the number of tweets per page
+    */
+    const totalTweets = await Tweet.countDocuments();
+
+    const totalPages = Math.ceil(totalTweets / limitNumber);
+
+    res.status(200).json(
+        new ApiResponse(200, {
+            tweets,
+            pagination: {
+                currentPage: pageNumber,
+                totalPages,
+                totalTweets,
+            },
+        }, 'Tweets fetched successfully')
+    );
+};
+
 const getUserTweets = asyncHandler(async (req, res) => {
     //get the user id from the url by using req.params.
     //req.user finds for the authenticated user which in this case is not required
@@ -326,6 +391,7 @@ const getRetweets = asyncHandler(async (req, res) => {
 
 export {
     createTweet,
+    getAllTweets,
     getUserTweets,
     updateTweet,
     deleteTweet,
