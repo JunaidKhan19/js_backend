@@ -26,45 +26,80 @@ const createTweet = asyncHandler(async (req, res) => {
 const getAllTweets = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
 
-    const pageNumber = parseInt(page);
-    const limitNumber = parseInt(limit);
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
     const skip = (pageNumber - 1) * limitNumber;
 
-        // Aggregation pipeline to fetch tweets with pagination
     const tweets = await Tweet.aggregate([
         {
+            $match: { retweetsTo: null }, // Only fetch original tweets
+        },
+        {
             $lookup: {
-                from: 'users', // Join the 'users' collection
-                localField: 'owner', // Match tweets.owner
-                foreignField: '_id', // With users._id
-                as: 'owner', // Store matched user data in 'owner'
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
             },
         },
         {
             $addFields: {
-                owner: { $arrayElemAt: ['$owner', 0] }, // Unwrap the owner array
+                owner: { $arrayElemAt: ["$owner", 0] },
             },
         },
         {
-            $sort: { createdAt: -1 }, // Sort by creation date
+            $lookup: {
+                from: "tweets",
+                localField: "retweets",
+                foreignField: "_id",
+                as: "retweets",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                        },
+                    },
+                    {
+                        $addFields: {
+                            owner: { $arrayElemAt: ["$owner", 0] },
+                        },
+                    },
+                    {
+                        $project: {
+                            content: 1,
+                            createdAt: 1,
+                            owner: { userName: 1, avatar: 1 },
+                        },
+                    },
+                ],
+            },
+        },
+        {
+            $sort: { createdAt: -1 },
+        },
+        {
+            $skip: skip,
+        },
+        {
+            $limit: limitNumber,
         },
         {
             $project: {
-                content: 1, // Include tweet content
-                likes: 1, // Include likes count
-                retweets: 1, // Include retweets count
-                replies: 1, // Include replies count
-                createdAt: 1, // Include creation date
-                owner: {
-                    userName: 1, // Include owner's username
-                    avatar: 1, // Include owner's avatar
-                },
+                content: 1,
+                likes: 1,
+                retweets: 1,
+                createdAt: 1,
+                owner: { userName: 1, avatar: 1 },
             },
         },
-        { $skip: skip }, // Skip documents based on page
-        { $limit: limitNumber }, // Limit documents to the page size
     ]);
-    
+
+    const totalTweets = await Tweet.countDocuments({ retweetsTo: null });
+    const totalPages = Math.ceil(totalTweets / limitNumber);
+
     /* using populate
     const tweets = await Tweet.find({})
         .populate({ path: 'owner', select: 'userName avatar' }) // Populate owner details
@@ -72,9 +107,6 @@ const getAllTweets = async (req, res) => {
         .skip(skip) // Skip tweets based on the current page
         .limit(limitNumber); // Limit the number of tweets per page
     */
-    const totalTweets = await Tweet.countDocuments();
-
-    const totalPages = Math.ceil(totalTweets / limitNumber);
 
     res.status(200).json(
         new ApiResponse(200, {
@@ -86,9 +118,22 @@ const getAllTweets = async (req, res) => {
             },
         }, 'Tweets fetched successfully')
     );
-};
+};    
 
-const getUserTweets = asyncHandler(async (req, res) => {
+const getTweetById = async (req, res) => {
+    const { tweetId } = req.params
+
+    if (!isValidObjectId(tweetId)){
+        throw new ApiError(400, "not valid tweetId")
+    }
+
+    const tweet = await Tweet.findById(tweetId).populate("owner", "fullName userName avatar email")
+
+    return res.status(200)
+              .json(new ApiResponse(200, tweet, "Tweet fetched successfully"))
+}
+
+const getSearchUserTweets = asyncHandler(async (req, res) => {
     //get the user id from the url by using req.params.
     //req.user finds for the authenticated user which in this case is not required
     //since user can be any one among the many users
@@ -226,88 +271,94 @@ const likeTweet = asyncHandler(async (req, res) => {
     const { tweetId } = req.params;
 
     if (!isValidObjectId(tweetId)) {
-        throw new ApiError(400, "Invalid tweet");
+        throw new ApiError(400, "Invalid tweet ID");
     }
 
-    const tweet = await Tweet.findById(tweetId)
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "User not authenticated");
+    }
 
+    const tweet = await Tweet.findById(tweetId);
     if (!tweet) {
-        throw new ApiError(400, "Tweet not found");
+        throw new ApiError(404, "Tweet not found");
     }
 
-    //Check if the user already liked the tweet using `.some()` with ObjectId comparison
-    const isliked = tweet.likes.some( like => like._id.toString() === req.user._id.toString() );
+    const userId = req.user._id.toString();
+    const isLiked = tweet.likes.some((like) => like.toString() === userId);
 
-    if (isliked) {
-        tweet.likes.pull(req.user._id); // Remove the user's like if already liked
+    if (isLiked) {
+        tweet.likes = tweet.likes.filter((like) => like.toString() !== userId);
     } else {
-        tweet.likes.push(req.user._id); // Add the user's like if not already liked
+        tweet.likes.push(userId);
     }
 
-    const likedTweet = await tweet.save();
-
-    await likedTweet.populate({
+    const updatedTweet = await tweet.save();
+    
+    await updatedTweet.populate({
         path: "likes",
-        select: "username fullName email"
+        select: "userName fullName email avatar",
     });
 
-    return res.status(200)
-              .json(
-                new ApiResponse(
-                    200,
-                    {
-                        tweet: likedTweet,
-                        likedBy: likedTweet.likes,//optional since likedTweet.populate privides this
-                        totalLikes: likedTweet.likes.length
-                    },
-                    isliked ? "unliked tweet" : "Liked tweet"
-                )
-              
-            )  
-       ;
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                tweet: updatedTweet,
+                totalLikes: updatedTweet.likes.length,
+                likedBy: updatedTweet.likes,
+            },
+            isLiked ? "Tweet unliked successfully" : "Tweet liked successfully"
+        )
+    );
 });
+
 
 const retweet = asyncHandler(async (req, res) => {
     const { tweetId } = req.params;
-    const { content } = req.body;    
+    const { content } = req.body;
 
-    if (!isValidObjectId(tweetId)){
+    console.log("tweetId:", tweetId); // Debug log
+    console.log("content:", req.body); // Debug log
+
+    if (!isValidObjectId(tweetId)) {
         throw new ApiError(400, "Invalid tweet ID");
     }
 
     if (!content.trim()) {
-        throw new ApiError(400, "content is required");
+        throw new ApiError(400, "Content is required");
     }
 
     const tweet = await Tweet.findById(tweetId);
-
     if (!tweet) {
         throw new ApiError(400, "Tweet not found");
     }
 
+    console.log("Creating retweet for tweetId:", tweetId); // Debug log
+
     const Retweet = await Tweet.create({
-        content, // Reply content
-        owner : req.user._id, // The owner of the reply (the user making the reply)
-        likes : [], //the likes to the retwwets initialized as empty
-        retweets : [],
-        retweetsTo : tweetId // Linking the reply to the original tweet based on its Id
-    })
+        content,
+        owner: req.user._id,
+        likes: [],
+        retweets: [],
+        retweetsTo: tweetId, // Ensure this is an ObjectId, not an array
+    });
 
-    // Ensure the retweets array exists and is an array
-    tweet.retweets = tweet.retweets || []; // Initialize if undefined
+    console.log("Created retweet:", Retweet); // Debug log
 
-    // Push the retweet ID to the retweets array and Save the updated tweet document (main tweet)
-    tweet.retweets.push(Retweet._id);   
+    tweet.retweets = tweet.retweets || null;
+    tweet.retweets.push(Retweet._id);
     await tweet.save();
 
-    // Populate the retweets field of main tweet 
+    console.log("Updated main tweet retweets:", tweet.retweets); // Debug log
+
     await tweet.populate({
         path: "retweets",
-        select: "userName fullName email content"
+        select: "userName fullName email content",
     });
 
     return res.status(200).json(new ApiResponse(200, { Retweet }, "Retweeted successfully"));
 });
+
 
 const getRetweets = asyncHandler(async (req, res) => {
     const { tweetId } = req.params
@@ -338,6 +389,7 @@ const getRetweets = asyncHandler(async (req, res) => {
                             pipeline : [
                                 {
                                   $project : {
+                                        avatar : 1,
                                         fullName : 1,
                                         userName : 1,
                                         email : 1
@@ -354,19 +406,17 @@ const getRetweets = asyncHandler(async (req, res) => {
         },   
         {
             $project : {
-                content : 1, 
-                owner : 1, 
-                createdAt : 1, 
-                updatedAt : 1, // Last update time of the retweet
-                likesCount : { $size : "$likes" }, // Count of likes on the retweet 
-                isLiked : { $in : [req.user._id, "$likes"] }, // Check if the user liked this retweet
                 retweets : {
+                    _id: 1,
                     content : 1, 
-                    owner : 1, 
+                    owner : {
+                        userName : 1,
+                        avatar : 1
+                    }, 
                     createdAt : 1, 
-                    updatedAt : 1
-                },
-                retweetsTo : 1
+                    updatedAt : 1,
+                    retweetsTo : 1
+                }
             }
         }
     ])
@@ -392,7 +442,8 @@ const getRetweets = asyncHandler(async (req, res) => {
 export {
     createTweet,
     getAllTweets,
-    getUserTweets,
+    getTweetById,
+    getSearchUserTweets,
     updateTweet,
     deleteTweet,
     likeTweet,

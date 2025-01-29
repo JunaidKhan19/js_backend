@@ -19,8 +19,9 @@ const tweetSchema = new Schema({
     }],
     retweetsTo: {
         type: Schema.Types.ObjectId,
-        ref: "Tweet"
-    }
+        ref: 'Tweet',
+        default: null,
+    },    
 },{timestamps : true})
 
 export const Tweet = mongoose.model("Tweet", tweetSchema)

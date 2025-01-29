@@ -94,7 +94,8 @@ const registerUser = asyncHandler( async (req, res) => {
         coverImage: coverImage?.url || "",
         email, 
         password,
-        userName: userName.toLowerCase()
+        //userName: userName.toLowerCase()
+        userName: userName
     })
 
     const createdUser = await User.findById(user._id).select(
@@ -130,16 +131,25 @@ const loginUser = asyncHandler (async (req, res) => {
 
     //step 1 get data from req.body
     const {email, userName, password} = req.body
+    console.log("Request Body:", req.body);
+    console.log("User Name:", userName);
+    console.log("Email:", email);
+
 
     //step 2 checking for either username or email for making username or email base login
-    if (!(userName || email)){
+    if (!userName && !email){
         throw new ApiError(400, "username or email is required")
     }
 
     //step 3 finding the user from req.body eventually in existing database
-    const user = await User.findOne({
-        $or: [{userName}, {email}]
-    })
+    const query = {
+        $or: [
+          userName ? { userName: userName } : null,
+          email ? { email: email.toLowerCase() } : null
+        ].filter(Boolean), // Remove any null values
+      };
+      
+    const user = await User.findOne(query);
 
     //step 4 if no existing user found then error 
     if (!user){

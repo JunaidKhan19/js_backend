@@ -27,7 +27,7 @@ router.route("/:videoId")
 
 router.route("/:videoId").delete(verifyJWT, deleteVideo); 
 
-router.route("/:videoId/views").patch(incrimentViews); 
+router.route("/:videoId").patch(incrimentViews); 
 
 router.route("/like/:videoId").patch(verifyJWT, likeVideo);
 

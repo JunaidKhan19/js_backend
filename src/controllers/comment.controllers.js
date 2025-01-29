@@ -52,7 +52,8 @@ const getVideoComments = asyncHandler(async (req, res) => {
     const comments = await Comment.find({ video: videoId })
         .skip((pageInt - 1) * limitInt)
         .limit(limitInt)
-        .sort({ createdAt: -1 }); // Sort by most recent
+        .sort({ createdAt: -1 })
+        .populate("owner", "userName avatar"); // Sort by most recent
 
     // Get the total count of comments for pagination metadata
     const totalComments = await Comment.countDocuments({ video: videoId });
@@ -86,8 +87,9 @@ const getComment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "not valid comment id")
     }
 
-    const comment = await Comment.findById(commentId).populate("owner", "username fullName avatar")
-                                                     .populate("video", "title description thumbnail")
+    const comment = await Comment.findById(commentId)
+                                .populate("owner", "username fullName avatar")
+                                .populate("video", "title description thumbnail")
     
     if (!comment){
         throw new ApiError(400, "not valid comment" )
@@ -156,100 +158,84 @@ const deleteComment = asyncHandler(async (req, res) => {
 })
 
 const likeComment = asyncHandler(async (req, res) => {
-    const { commentId } = req.params
+    const { commentId } = req.params;
 
-    if (!isValidObjectId(commentId)){
-        throw new ApiError(400, "not a valid comment id")
+    if (!isValidObjectId(commentId)) {
+        throw new ApiError(400, "Invalid comment ID.");
     }
 
-    const comment = await Comment.findById(commentId)
-
+    const comment = await Comment.findById(commentId);
     if (!comment) {
-        throw new ApiError(400, "not a valid comment");
+        throw new ApiError(404, "Comment not found.");
     }
 
-    const isLiked = comment.likes.some( like => like._id.toString() === req.user._id.toString() )
+    const userId = req.user._id;
 
-    const isdisliked = comment.dislikes.some( dislike => dislike._id.toString() === req.user._id.toString() )
+    // Check if the user already liked or disliked the comment
+    const alreadyLiked = comment.likes.some(like => like._id.toString() === userId.toString());
+    const alreadyDisliked = comment.dislikes.some(dislike => dislike._id.toString() === userId.toString());
 
-    if (isLiked){
-        return res.status(200).json(new ApiResponse(200, {}, "You have already liked the comment"));
+    if (alreadyLiked) {
+        return res.status(200).json(new ApiResponse(200, {}, "You have already liked the comment."));
     }
-    
-    if (isdisliked) {
-        comment.dislikes.pull(req.user._id)
+
+    // Handle dislike removal or adding like
+    if (alreadyDisliked) {
+        comment.dislikes.pull(userId);
     } else {
-        comment.likes.push(req.user._id)
+        comment.likes.push(userId);
     }
 
-    await comment.save()
+    await comment.save();
+    await comment.populate("likes", "userName fullName email");
 
-    await comment.populate({
-        path : "likes",
-        select : "username fullName email"
-    })
+    return res.status(200).json(new ApiResponse(200, {
+        comment,
+        liked_by: comment.likes,
+        total_likes: comment.likes.length
+    }, "Comment liked successfully."));
+});
 
-    return res.status(200)
-              .json(
-                new ApiResponse(
-                    200,
-                    {
-                        comment,
-                        liked_by : comment.likes,
-                        total_likes: comment.likes.length
-                    },
-                    "liked comment"
-                )
-            )
-})
 
 const dislikeComment = asyncHandler(async (req, res) => {
-    const { commentId } = req.params
+    const { commentId } = req.params;
 
-    if (!isValidObjectId(commentId)){
-        throw new ApiError(400, "not a valid comment id")
+    if (!isValidObjectId(commentId)) {
+        throw new ApiError(400, "Invalid comment ID.");
     }
 
-    const comment = await Comment.findById(commentId)
-
+    const comment = await Comment.findById(commentId);
     if (!comment) {
-        throw new ApiError(400, "not a valid comment");
+        throw new ApiError(404, "Comment not found.");
     }
 
-    const isLiked = comment.likes.some( like => like._id.toString() === req.user._id.toString() )
+    const userId = req.user._id;
 
-    const isdisliked = comment.dislikes.some( dislike => dislike._id.toString() === req.user._id.toString() )
+    // Check if the user already liked or disliked the comment
+    const alreadyLiked = comment.likes.some(like => like._id.toString() === userId.toString());
+    const alreadyDisliked = comment.dislikes.some(dislike => dislike._id.toString() === userId.toString());
 
-    if (isdisliked){
-        return res.status(200).json(new ApiResponse(200, {}, "you have already disliked the comment"))
+    if (alreadyDisliked) {
+        return res.status(200).json(new ApiResponse(200, {}, "You have already disliked the comment."));
     }
 
-    if (isLiked){
-        comment.likes.pull(req.user._id)
+    // Handle like removal or adding dislike
+    if (alreadyLiked) {
+        comment.likes.pull(userId);
     } else {
-        comment.dislikes.push(req.user._id)
+        comment.dislikes.push(userId);
     }
 
-    await comment.save()
+    await comment.save();
+    await comment.populate("dislikes", "userName fullName email");
 
-    await comment.populate({
-        path : "dislikes",
-        select : "username fullName email"
-    })
+    return res.status(200).json(new ApiResponse(200, {
+        comment,
+        disliked_by: comment.dislikes,
+        total_dislikes: comment.dislikes.length
+    }, "Comment disliked successfully."));
+});
 
-    return res.status(200)
-              .json(
-                new ApiResponse(
-                    200,
-                    {
-                        comment,
-                        dislikedby : comment.dislikes,
-                        totalDislikes: comment.dislikes.length
-                    },
-                    "unliked comment" 
-                )
-            )
-})
 
 const replyComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params // from url get the main comment id
@@ -287,75 +273,76 @@ const replyComment = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, { Reply }, "reply added successfully"))
 })
 
-const getreply = asyncHandler (async (req, res) => {
-    const { commentId } = req.params
+const getreply = asyncHandler(async (req, res) => {  
+    const { commentId } = req.params;
 
-    if (!isValidObjectId(commentId)){
-        throw new ApiError(400, "not a valid comment id")
+    if (!isValidObjectId(commentId)) {
+        throw new ApiError(400, "Not a valid comment ID");
     }
 
     const replylist = await Comment.aggregate([
         {
-            $match : {
-                _id : new mongoose.Types.ObjectId(commentId)
-            }
+            $match: {
+                _id: new mongoose.Types.ObjectId(commentId),
+            },
         },
         {
-            $lookup : {
-                from : "comments",
-                localField : "replies",
-                foreignField : "_id",
-                as : "replies",
-                pipeline : [
+            $lookup: {
+                from: "comments",
+                localField: "replies",
+                foreignField: "_id",
+                as: "replies",
+                pipeline: [
                     {
-                        $lookup : {
-                            from : "users",
-                            localField : "owner",
-                            foreignField : "_id",
-                            as : "owner",
-                            pipeline : [
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
                                 {
-                                    $project : {
-                                        fullName : 1,
-                                        userName : 1,
-                                        email : 1
-                                    }
-                                }
-                            ]
-                        }
+                                    $project: {
+                                        fullName: 1,
+                                        userName: 1,
+                                        email: 1,
+                                    },
+                                },
+                            ],
+                        },
                     },
                     {
-                        $unwind : "$owner"
-                    }
-                ]
-            }
+                        $unwind: "$owner",
+                    },
+                ],
+            },
         },
         {
-            $project : {
-                content : 1,
-                owner : 1,
-                createdAT : 1,
-                updatedAt : 1,
-                likesCount : { $size : "$likes"},
-                isliked : { $in : [req.user._id, "$likes"]},
-                replies : {
-                    content : 1,
-                    owner : 1,
-                    createdAT : 1,
-                    updatedAt : 1 ,
-                    repliesTo : 1
-                },
-                repliesTo : 1
-            }
-        }
-    ])
+            $project: {
+                content: 1,
+                owner: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                likesCount: { $size: "$likes" },
+                replies: 1,
+            },
+        },
+    ]);
 
-    if (!replylist){
-        throw new ApiError(400, "no reply found")
+    if (!replylist || replylist.length === 0) {
+        throw new ApiError(400, "No replies found");
     }
+    
+    const replyObject = replylist[0].replies.reduce((acc, reply) => {
+        if (reply._id) {
+            acc[reply._id.toString()] = reply; // Use toString() to ensure keys are strings
+        }
+        return acc;
+    }, {});
 
-    return res.status(200).json(new ApiResponse(200 , replylist, "replies fetched successfully"))
-})
+    return res.status(200).json(
+        new ApiResponse(200, { replies: replyObject }, "Replies fetched successfully")
+    );
+});
 
 export {
     addComment,

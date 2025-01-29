@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
     createTweet,
     getAllTweets,
-    getUserTweets,
+    getTweetById,
+    getSearchUserTweets,
     updateTweet,
     deleteTweet,
     likeTweet,
@@ -12,21 +13,23 @@ import {
 import { verifyJWT } from '../middlewares/auth.middleware.js';
 
 const router = Router()
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
+//router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
-router.route('/createtweet').post(createTweet);
+router.route('/createtweet').post(verifyJWT, createTweet);
 
 router.route('/getAllTweets').get(getAllTweets)
 
-router.route("/users/:userName").get(getUserTweets);
+router.route('/getTweetById/:tweetId').get(getTweetById)
+
+router.route("/users/:userName").get(verifyJWT, getSearchUserTweets);
 
 router.route("/:tweetId")
-    .patch(updateTweet)  // For updating the tweet
-    .delete(deleteTweet);  // For deleting the tweet
+    .patch(verifyJWT, updateTweet)  // For updating the tweet
+    .delete(verifyJWT, deleteTweet);  // For deleting the tweet
 
-router.route("/like/:tweetId").patch(likeTweet);
+router.route("/like/:tweetId").patch(verifyJWT, likeTweet);
 
-router.route("/:tweetId/retweet").post(retweet);
+router.route("/:tweetId/retweet").post(verifyJWT, retweet);
 
 router.route("/:tweetId/retweet").get(getRetweets);
 

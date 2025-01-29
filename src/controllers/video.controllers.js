@@ -4,6 +4,7 @@ import { uploadOnCloudinary } from '../utils/cloudinary.js';
 import { ApiError } from '../utils/apiError.js';
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from '../utils/asynchandler.js';
+import mongoose from "mongoose";
 
 const publishAVideo = asyncHandler(async(req,res)=>{
     const {title,description} = req.body;
@@ -42,7 +43,7 @@ const getVideobyId = asyncHandler (async (req, res) => {
     }
 
     const video = await Video.findById(videoId)
-                            .populate("owner", "username fullName email avatar")
+                            .populate("owner", "userName avatar")
 
     if (!video){
         throw new ApiError(400, "video not found")
@@ -119,41 +120,90 @@ const deleteVideo = asyncHandler (async (req, res) => {
 
 //using aggregatepaginate
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query = "", userId } = req.query
-    const options = {
-        page : parseInt(page),
-        limit : parseInt(limit),
-        sort : { createdAt : -1 },
-        skip : (page - 1) * limit,
-        populate : { path : 'owner', select : 'userName avatar' }
+    const { page = 1, limit = 10, query = "", userId } = req.query;
+
+    // Parse and validate page and limit
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+    if (isNaN(pageNumber) || isNaN(limitNumber)) {
+        return res.status(400).json(new ApiResponse(400, null, "Invalid page or limit parameter"));
     }
 
-    const pipeline = [];
+    // Validate userId if provided
+    if (userId && !isValidObjectId(userId)) {
+        return res.status(400).json(new ApiResponse(400, null, "Invalid userId format"));
+    }
+
+    // Base pipeline for filtering
+    const filterPipeline = [];
+
+    // Add user-specific filter if userId is provided
+    if (userId) {
+        filterPipeline.push({ $match: { owner: new mongoose.Types.ObjectId(userId) } });
+    }
+
+    // Add search filter for query
     if (query) {
-        pipeline.push({
+        filterPipeline.push({
             $match: {
                 $or: [
-                    { title: { $regex: query, $options: "i" } }, 
-                    { description: { $regex: query, $options: "i" } }
-                ]
-            }
-        });
-    }
-    if (userId) {
-        pipeline.push({
-            $match: { owner: userId }
+                    { title: { $regex: query, $options: "i" } },
+                    { description: { $regex: query, $options: "i" } },
+                ],
+            },
         });
     }
 
-    // Use aggregatePaginate with the customized pipeline
-    const videos = await Video.aggregatePaginate(Video.aggregate(pipeline), options);
+    // Count total videos matching filters
+    const totalVideos = await Video.aggregate([...filterPipeline, { $count: "total" }]);
+    const totalFiles = totalVideos.length > 0 ? totalVideos[0].total : 0;
 
-    
+    // Calculate total pages
+    const totalPages = Math.ceil(totalFiles / limitNumber);
+
+    // Add pagination stages to the pipeline
+    const pipeline = [
+        ...filterPipeline,
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "ownerDetails",
+            },
+        },
+        {
+            $unwind: {
+                path: "$ownerDetails",
+                preserveNullAndEmptyArrays: true,
+            },
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                createdAt: 1,
+                "ownerDetails.userName": 1,
+                "ownerDetails.avatar": 1,
+            },
+        },
+        { $skip: (pageNumber - 1) * limitNumber },
+        { $limit: limitNumber },
+    ];
+
+    // Execute aggregation to fetch videos
+    const videos = await Video.aggregate(pipeline);
+
+    // Handle no videos case
     if (!videos || videos.length === 0) {
         return res.status(404).json(new ApiResponse(404, null, "No videos found"));
     }
-    
-    return res.status(200).json(new ApiResponse(200, videos, "Videos fetched successfully"));
+
+    // Return response with pagination info
+    return res.status(200).json(
+        new ApiResponse(200, { videos, currentPage: pageNumber, totalPages, totalFiles }, "Videos fetched successfully")
+    );
 });
 
 const incrimentViews = asyncHandler (async (req, res) => {

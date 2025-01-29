@@ -13,24 +13,21 @@ import {
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router()
-router.use(verifyJWT)
 
-router.route("/uploadcomment/:videoId").post(addComment);
+router.route("/uploadcomment/:videoId").post(verifyJWT, addComment);
 
 router.route("/getvideocomment/:videoId").get(getVideoComments)
 
 router.route("/:commentId")
+    .get(verifyJWT, getComment)
+    .patch(verifyJWT, updateComment)  // For updating the tweet
+    .delete(verifyJWT, deleteComment);  // For deleting the tweet
 
-router.route("/:commentId")
-    .get(getComment)
-    .patch(updateComment)  // For updating the tweet
-    .delete(deleteComment);  // For deleting the tweet
+router.route("/like/:commentId").patch(verifyJWT, likeComment);
 
-router.route("/like/:commentId").patch(likeComment);
+router.route("/dislike/:commentId").patch(verifyJWT, dislikeComment);
 
-router.route("/dislike/:commentId").patch(dislikeComment);
-
-router.route("/reply/:commentId").post(replyComment);
+router.route("/reply/:commentId").post(verifyJWT, replyComment);
 
 router.route("/getreply/:commentId").get(getreply);
 
