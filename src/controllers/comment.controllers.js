@@ -189,10 +189,14 @@ const likeComment = asyncHandler(async (req, res) => {
     await comment.save();
     await comment.populate("likes", "userName fullName email");
 
-    return res.status(200).json(new ApiResponse(200, {
-        comment,
+    const updatedComment = {
+        ...comment.toObject(),
         liked_by: comment.likes,
         total_likes: comment.likes.length
+    };
+
+    return res.status(200).json(new ApiResponse(200, { 
+        comment: updatedComment 
     }, "Comment liked successfully."));
 });
 
@@ -229,13 +233,16 @@ const dislikeComment = asyncHandler(async (req, res) => {
     await comment.save();
     await comment.populate("dislikes", "userName fullName email");
 
-    return res.status(200).json(new ApiResponse(200, {
-        comment,
+    const updatedComment = {
+        ...comment.toObject(),
         disliked_by: comment.dislikes,
         total_dislikes: comment.dislikes.length
+    };
+    
+    return res.status(200).json(new ApiResponse(200, { 
+        comment: updatedComment 
     }, "Comment disliked successfully."));
 });
-
 
 const replyComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params // from url get the main comment id
@@ -251,7 +258,7 @@ const replyComment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "not a valid comment")
     }
 
-    const Reply = await Comment.create({
+    const reply = await Comment.create({
         content,        
         owner : req.user._id,
         repliesTo : commentId //main comment id referenced in the repliesTo
@@ -261,7 +268,7 @@ const replyComment = asyncHandler(async (req, res) => {
     comment.replies = comment.replies || [] //initialize if undefined
 
     //push the reply id to the replies field of main comment array and save
-    comment.replies.push(Reply._id)
+    comment.replies.push(reply._id)
     await comment.save()
 
     //populate the main comment replies field
@@ -270,7 +277,7 @@ const replyComment = asyncHandler(async (req, res) => {
         select : "content userName fullName email"
     })
 
-    return res.status(200).json(new ApiResponse(200, { Reply }, "reply added successfully"))
+    return res.status(200).json(new ApiResponse(200, { reply }, "reply added successfully"))
 })
 
 const getreply = asyncHandler(async (req, res) => {  
@@ -332,6 +339,13 @@ const getreply = asyncHandler(async (req, res) => {
         throw new ApiError(400, "No replies found");
     }
     
+    const repliesArray = replylist[0]?.replies || [];
+
+    return res.status(200).json(
+        new ApiResponse(200, repliesArray, "Replies fetched successfully")
+    );
+
+    /* convert replies from array to object
     const replyObject = replylist[0].replies.reduce((acc, reply) => {
         if (reply._id) {
             acc[reply._id.toString()] = reply; // Use toString() to ensure keys are strings
@@ -341,7 +355,7 @@ const getreply = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, { replies: replyObject }, "Replies fetched successfully")
-    );
+    );*/
 });
 
 export {

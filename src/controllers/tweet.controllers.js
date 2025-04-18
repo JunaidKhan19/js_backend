@@ -134,74 +134,93 @@ const getTweetById = async (req, res) => {
 }
 
 const getSearchUserTweets = asyncHandler(async (req, res) => {
-    //get the user id from the url by using req.params.
-    //req.user finds for the authenticated user which in this case is not required
-    //since user can be any one among the many users
-    const { userName } = req.params
+    const { userName } = req.params;
 
-    if (!userName){
-        throw new ApiError(400, "invalid username")
+    if (!userName) {
+        throw new ApiError(400, "Invalid username");
     }
 
+    // Find the user by username
     const user = await User.findOne({ userName });
-
     if (!user) {
         throw new ApiError(404, "User not found");
     }
 
-    const userId = user._id
+    const userId = user._id;
 
-    if (!isValidObjectId(userId)){
-        throw new ApiError(400, "not a valid user")
+    if (!isValidObjectId(userId)) {
+        throw new ApiError(400, "Not a valid user");
     }
-    
-    const usersTweets = await Tweet.aggregate([
-        {
-            //match stage is used to filter tweets where the owner is 
-            //the user with the given userId.
-            //we are explicitly converting the userId into a mongoose ObjectId since 
-            //it is in string format 
-            $match : {
-                owner : new mongoose.Types.ObjectId(userId)
-            }
-        },
-        {
-            $lookup : {
-                from : 'users', // Collection to join                  
-                localField : 'owner', // Field from the Tweet model
-                foreignField : '_id', // Field from the User model
-                as : 'owner'  // Field to store the resulting user data
-            }
-        },
-        {
-            // Add the first user from the 'owner' array (since we expect only one)
-            $addFields : {
-                owner : { $arrayElemAt : ['$owner',0]}
-            }
-        },
-        {
-             // Sort the tweets by the createdAt field in descending order (most recent first)
-            $sort : {
-                createdAt : -1
-            }
-        },
-        {
-            $project : {
-                content : 1, // Keep tweet content
-                retweets : 1,
-                createdAt : 1, // Keep tweet creation time
-                owner : {
-                    fullName : 1, // Keep owner's full name
-                    userName : 1, // Keep owner's username
-                    avatar : 1 // Keep owner's avatar
-                }                   
-            }
-        },
-    ])
-    return res.status(200)
-              .json(new ApiResponse(200, usersTweets, "User's tweets retrieved successfully"));
-});
 
+    // Fetch only the original tweets of the user (not retweets)
+    const userTweets = await Tweet.aggregate([
+        {
+            $match: { 
+                owner: new mongoose.Types.ObjectId(userId),
+                retweetsTo: null // Exclude retweets
+            }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        {
+            $addFields: {
+                owner: { $arrayElemAt: ["$owner", 0] }
+            }
+        },
+        {
+            $lookup: {
+                from: "tweets",
+                localField: "retweets",
+                foreignField: "_id",
+                as: "retweets",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            owner: { $arrayElemAt: ["$owner", 0] }
+                        }
+                    },
+                    {
+                        $project: {
+                            content: 1,
+                            createdAt: 1,
+                            owner: { userName: 1, avatar: 1 }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $sort: { createdAt: -1 }
+        },
+        {
+            $project: {
+                content: 1,
+                likes: 1,
+                retweets: 1,
+                createdAt: 1,
+                owner: { userName: 1, avatar: 1 }
+            }
+        }
+    ]);
+
+    return res.status(200).json(
+        new ApiResponse(200, { tweets: userTweets }, "User's tweets retrieved successfully")
+    );
+});
 const updateTweet = asyncHandler(async (req, res) => {
     const { tweetId } = req.params; // Access the tweet ID from the URL
     const { content } = req.body;
