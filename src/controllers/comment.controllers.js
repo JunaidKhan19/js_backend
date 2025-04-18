@@ -176,14 +176,14 @@ const likeComment = asyncHandler(async (req, res) => {
     const alreadyDisliked = comment.dislikes.some(dislike => dislike._id.toString() === userId.toString());
 
     if (alreadyLiked) {
-        return res.status(200).json(new ApiResponse(200, {}, "You have already liked the comment."));
-    }
-
-    // Handle dislike removal or adding like
-    if (alreadyDisliked) {
-        comment.dislikes.pull(userId);
+        // Toggle: remove like
+        comment.likes.pull(userId);
     } else {
+        // Add like and remove dislike if any
         comment.likes.push(userId);
+        if (alreadyDisliked) {
+            comment.dislikes.pull(userId);
+        }
     }
 
     await comment.save();
@@ -220,14 +220,14 @@ const dislikeComment = asyncHandler(async (req, res) => {
     const alreadyDisliked = comment.dislikes.some(dislike => dislike._id.toString() === userId.toString());
 
     if (alreadyDisliked) {
-        return res.status(200).json(new ApiResponse(200, {}, "You have already disliked the comment."));
-    }
-
-    // Handle like removal or adding dislike
-    if (alreadyLiked) {
-        comment.likes.pull(userId);
+        // Toggle: remove dislike
+        comment.dislikes.pull(userId);
     } else {
+        // Add dislike and remove like if any
         comment.dislikes.push(userId);
+        if (alreadyLiked) {
+            comment.likes.pull(userId);
+        }
     }
 
     await comment.save();
